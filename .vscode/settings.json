@@ -1,0 +1,13 @@
+{
+    "files.associations": {
+        "socket.h": "c",
+        "string.h": "c",
+        "stdlib.h": "c",
+        "in.h": "c",
+        "stdio.h": "c",
+        "unistd.h": "c",
+        "iostream": "cpp",
+        "*.tcc": "cpp",
+        "string": "cpp"
+    }
+}
