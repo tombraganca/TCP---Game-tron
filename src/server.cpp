@@ -1,5 +1,3 @@
-// Example code: A simple server side code, which echos back the received message.
-// Handle multiple socket connections with select and fd_set on Linux
 #include <stdio.h>
 #include <string.h> //strlen
 #include <stdlib.h>
@@ -11,14 +9,46 @@
 #include <netinet/in.h>
 #include <sys/time.h> //FD_SET, FD_ISSET, FD_ZERO macros
 
+#include <iostream>
+#include <string>
+#include <sstream>
+
+#include <thread>
+#include <mutex>
+#include <list>
+
 #define TRUE 1
 #define FALSE 0
 #define PORT 8888
 #define PLAYERS 2
 
-int soma(int a, int b)
+using namespace std;
+
+class safe_queue
 {
-    return a + b;
+    mutex m;
+    list<string> str_queue;
+
+public:
+    safe_queue(){};
+    void add(const string &s)
+    {
+        const lock_guard<mutex> lock(m);
+        str_queue.push_back(s);
+    }
+
+    bool pop(string &s)
+    {
+        const lock_guard<mutex> lock(m);
+        if (!str_queue.empty())
+        {
+            s = str_queue.front();
+            str_queue.pop_front();
+            return true;
+        }
+
+        return false;
+    }
 };
 
 int main(int argc, char *argv[])
@@ -26,7 +56,7 @@ int main(int argc, char *argv[])
     int opt = TRUE;
     int players_ready = 0;
     int master_socket, addrlen, new_socket, client_socket[PLAYERS],
-        max_clients = PLAYERS, activity, i, valread, sd;
+        max_clients = PLAYERS, activity, i, valread, socket_descriptor;
     int max_sd;
     struct sockaddr_in address;
 
@@ -84,8 +114,20 @@ int main(int argc, char *argv[])
     addrlen = sizeof(address);
     puts("Waiting for connections ...");
 
+    safe_queue sq;
+
+    bool running = true;
+
+    auto io_thread = thread([&]
+                            {
+        string s;
+        while (1){
+            printf("game");
+        } }); // thread.
+
     while (TRUE)
     {
+        printf("Inicio");
         // clear the socket set
         FD_ZERO(&readfds);
 
@@ -97,15 +139,15 @@ int main(int argc, char *argv[])
         for (i = 0; i < max_clients; i++)
         {
             // socket descriptor
-            sd = client_socket[i];
+            socket_descriptor = client_socket[i];
 
             // if valid socket descriptor then add to read list
-            if (sd > 0)
-                FD_SET(sd, &readfds);
+            if (socket_descriptor > 0)
+                FD_SET(socket_descriptor, &readfds);
 
             // highest file descriptor number, need it for the select function
-            if (sd > max_sd)
-                max_sd = sd;
+            if (socket_descriptor > max_sd)
+                max_sd = socket_descriptor;
         }
 
         // wait for an activity on one of the sockets , timeout is NULL ,
@@ -129,7 +171,7 @@ int main(int argc, char *argv[])
             }
 
             // inform user of socket number - used in send and receive commands
-            printf("New connection , socket fd is %d , ip is : %s , port : %d\n", new_socket, inet_ntoa(address.sin_addr), ntohs(address.sin_port));
+            // printf("New connection , socket fd is %d , ip is : %s , port : %d\n", new_socket, inet_ntoa(address.sin_addr), ntohs(address.sin_port));
 
             // send new connection greeting message
             if (send(new_socket, message, strlen(message), 0) != strlen(message))
@@ -146,32 +188,33 @@ int main(int argc, char *argv[])
                 if (client_socket[i] == 0)
                 {
                     client_socket[i] = new_socket;
-                    printf("Adding to list of sockets as %d\n", i);
+                    // printf("Adding to list of sockets as %d\n", i);
 
                     break;
                 }
             }
+            printf("meio");
         }
 
         // else its some IO operation on some other socket
         for (i = 0; i < max_clients; i++)
         {
-            sd = client_socket[i];
+            socket_descriptor = client_socket[i];
 
-            if (FD_ISSET(sd, &readfds))
+            if (FD_ISSET(socket_descriptor, &readfds))
             {
                 // Check if it was for closing , and also read the
                 // incoming message
-                if ((valread = read(sd, buffer, 1024)) == 0)
+                if ((valread = read(socket_descriptor, buffer, 1024)) == 0)
                 {
                     // Somebody disconnected , get his details and print
-                    getpeername(sd, (struct sockaddr *)&address,
+                    getpeername(socket_descriptor, (struct sockaddr *)&address,
                                 (socklen_t *)&addrlen);
                     printf("Host disconnected , ip %s , port %d \n",
                            inet_ntoa(address.sin_addr), ntohs(address.sin_port));
 
                     // Close the socket and mark as 0 in list for reuse
-                    close(sd);
+                    close(socket_descriptor);
                     client_socket[i] = 0;
                 }
 
@@ -181,6 +224,8 @@ int main(int argc, char *argv[])
                     // set the string terminating NULL byte on the end
                     // of the data read
                     buffer[valread] = '\0';
+
+                    send(socket_descriptor, buffer, strlen(buffer), 0);
 
                     for (int j = 0; j < max_clients; j++)
                     {
@@ -197,16 +242,19 @@ int main(int argc, char *argv[])
                     }
                     if (players_ready == 2)
                     {
-                        printf("sending start signal to clients\n");
                         for (int j = 0; j < max_clients; j++)
                         {
-                            send(client_socket[j], "start", strlen("start"), 0);
+                            send(client_socket[j], "start\n", strlen("start\n"), 0);
                         }
-                        players_ready = 0;
+                        printf("sending start signal to clients\n");
+
+                        // logica do game
                     }
                 }
             }
         }
+
+        printf("fim");
     }
 
     return 0;
