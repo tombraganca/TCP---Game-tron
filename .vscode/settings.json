@@ -8,6 +8,7 @@
         "unistd.h": "c",
         "iostream": "cpp",
         "*.tcc": "cpp",
-        "string": "cpp"
+        "string": "cpp",
+        "ostream": "cpp"
     }
 }
