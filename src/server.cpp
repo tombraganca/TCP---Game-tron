@@ -7,60 +7,50 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <time.h>
 #include <sys/time.h> //FD_SET, FD_ISSET, FD_ZERO macros
-
-#include <iostream>
-#include <string>
 #include <sstream>
-
-#include <thread>
-#include <mutex>
-#include <list>
 
 #define TRUE 1
 #define FALSE 0
 #define PORT 8888
 #define PLAYERS 2
 
-using namespace std;
-
-class safe_queue
+bool all_ready(int players_connected[2][2], int max_clients)
 {
-    mutex m;
-    list<string> str_queue;
-
-public:
-    safe_queue(){};
-    void add(const string &s)
+    for (int i = 0; i < max_clients; i++)
     {
-        const lock_guard<mutex> lock(m);
-        str_queue.push_back(s);
-    }
-
-    bool pop(string &s)
-    {
-        const lock_guard<mutex> lock(m);
-        if (!str_queue.empty())
+        if (players_connected[i][1] == 0)
         {
-            s = str_queue.front();
-            str_queue.pop_front();
-            return true;
+            return false;
         }
-
-        return false;
     }
-};
+    return true;
+}
+
+void send_message_to_all_connections(char message[], int client_socket[], int max_clients)
+{
+    for (int i = 0; i < max_clients; i++)
+    {
+        if (client_socket[i] != 0)
+        {
+            send(client_socket[i], message, strlen(message), 0);
+        }
+    }
+}
 
 int main(int argc, char *argv[])
 {
     int opt = TRUE;
-    int players_ready = 0;
+    int players_ready[PLAYERS][PLAYERS] = {0};
     int master_socket, addrlen, new_socket, client_socket[PLAYERS],
         max_clients = PLAYERS, activity, i, valread, socket_descriptor;
     int max_sd;
+    bool game_started = false;
+
     struct sockaddr_in address;
 
-    char buffer[1025]; // data buffer of 1K
+    char buffer[1025] = {0}; // data buffer of 1K
 
     // set of socket descriptors
     fd_set readfds;
@@ -114,20 +104,8 @@ int main(int argc, char *argv[])
     addrlen = sizeof(address);
     puts("Waiting for connections ...");
 
-    safe_queue sq;
-
-    bool running = true;
-
-    auto io_thread = thread([&]
-                            {
-        string s;
-        while (1){
-            printf("game");
-        } }); // thread.
-
     while (TRUE)
     {
-        printf("Inicio");
         // clear the socket set
         FD_ZERO(&readfds);
 
@@ -171,7 +149,7 @@ int main(int argc, char *argv[])
             }
 
             // inform user of socket number - used in send and receive commands
-            // printf("New connection , socket fd is %d , ip is : %s , port : %d\n", new_socket, inet_ntoa(address.sin_addr), ntohs(address.sin_port));
+            printf("New connection , socket fd is %d , ip is : %s , port : %d\n", new_socket, inet_ntoa(address.sin_addr), ntohs(address.sin_port));
 
             // send new connection greeting message
             if (send(new_socket, message, strlen(message), 0) != strlen(message))
@@ -188,12 +166,12 @@ int main(int argc, char *argv[])
                 if (client_socket[i] == 0)
                 {
                     client_socket[i] = new_socket;
+                    players_ready[i][0] = new_socket;
                     // printf("Adding to list of sockets as %d\n", i);
 
                     break;
                 }
             }
-            printf("meio");
         }
 
         // else its some IO operation on some other socket
@@ -215,6 +193,7 @@ int main(int argc, char *argv[])
 
                     // Close the socket and mark as 0 in list for reuse
                     close(socket_descriptor);
+                    players_ready[i][0] = 0;
                     client_socket[i] = 0;
                 }
 
@@ -227,34 +206,83 @@ int main(int argc, char *argv[])
 
                     send(socket_descriptor, buffer, strlen(buffer), 0);
 
-                    for (int j = 0; j < max_clients; j++)
+
+                    // Esperando que todos os jogadores estejam prontos
+                    if (!game_started)
                     {
-                        if (client_socket[j] != 0)
+                        if (buffer[0] == 'r')
                         {
-                            send(client_socket[j], buffer, strlen(buffer), 0);
+                            players_ready[i][1] = 1;
                         }
+                        else
+                        {
+                            send(socket_descriptor, "Please send 'r' to ready up", 27, 0);
+                        }
+
+                        if (all_ready(players_ready, max_clients))
+                        {
+
+                            int time = 3;
+
+                            while (time > 0)
+                            {
+                                char time_buffer[10];
+                                sprintf(time_buffer, "%d", time);
+                                send_message_to_all_connections(time_buffer, client_socket, max_clients);
+                                sleep(1);
+                                time--;
+                            }
+                            game_started = true;
+                            send_message_to_all_connections("\nStart", client_socket, max_clients);
+                        }
+
+                        continue;
                     }
 
-                    if (buffer[0] == 'r')
-                    {
-                        players_ready++;
-                        printf("players ready: %d\n", players_ready);
-                    }
-                    if (players_ready == 2)
-                    {
-                        for (int j = 0; j < max_clients; j++)
-                        {
-                            send(client_socket[j], "start\n", strlen("start\n"), 0);
-                        }
-                        printf("sending start signal to clients\n");
+                    // Quando o game está iniciado
 
-                        // logica do game
+                    if (strstr(buffer, "w") != NULL)
+                    {
+                        send_message_to_all_connections("w", client_socket, max_clients);
+                    }
+                    else if (strstr(buffer, "a") != NULL)
+                    {
+                        send_message_to_all_connections("a", client_socket, max_clients);
+                    }
+                    else if (strstr(buffer, "s") != NULL)
+                    {
+                        send_message_to_all_connections("s", client_socket, max_clients);
+                    }
+                    else if (strstr(buffer, "d") != NULL)
+                    {
+                        send_message_to_all_connections("d", client_socket, max_clients);
+                    }
+                    else if (strstr(buffer, "up") != NULL)
+                    {
+                        send_message_to_all_connections("up", client_socket, max_clients);
+                    }
+                    else if (strstr(buffer, "down") != NULL)
+                    {
+                        send_message_to_all_connections("down", client_socket, max_clients);
+                    }
+                    else if (strstr(buffer, "left") != NULL)
+                    {
+                        send_message_to_all_connections("left", client_socket, max_clients);
+                    }
+                    else if (strstr(buffer, "right") != NULL)
+                    {
+                        send_message_to_all_connections("right", client_socket, max_clients);
+                    }
+                    else if (strstr(buffer, "win") != NULL)
+                    {
+
+                        // char player = to_string(socket_descriptor);
+                        // char *alert = {'win'+socket_descriptor};
+                        // send_message_to_all_connections(alert, client_socket, max_clients);
                     }
                 }
             }
         }
-
-        printf("fim");
     }
 
     return 0;
