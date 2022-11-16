@@ -17,7 +17,6 @@ make build
 ```
 make game
 ```
-```
 3) run server
 ```
 make server
