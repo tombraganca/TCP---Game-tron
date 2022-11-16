@@ -3,7 +3,6 @@
 
 > Build Notes Linux
 
-0) ```cd TronSocketGame```
 1) Open your Linux terminal
 2) Install all dependencies on Ubuntu
 ```
