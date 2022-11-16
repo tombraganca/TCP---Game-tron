@@ -1,7 +1,7 @@
 build:
 	rm -rf dist/
 	mkdir -p ./dist/
-	cp ./TronSocketGame/font.ttf dist/
+	cp font.ttf dist/
 	g++ ./TronSocketGame/src/main.cpp -o ./dist/main -lsfml-graphics -lsfml-window -lsfml-system -std=c++11 -pthread
 	g++ ./Servidor/server.cpp   -o ./dist/server
 game: 

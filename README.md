@@ -5,13 +5,22 @@
 
 0) ```cd TronSocketGame```
 1) Open your Linux terminal
-2) Ubuntu pre-install
+2) Install all dependencies on Ubuntu
 ```
 make preinstall
 ```
-3) Build Game and run
+3) Build
 ```
-make
+make build
+```
+3) run game
+```
+make game
+```
+```
+3) run server
+```
+make server
 ```
 
 > Required Packages
