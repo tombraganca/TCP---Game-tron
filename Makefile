@@ -12,4 +12,4 @@ server:
 preinstall:
 	#ubuntu
 	sudo apt update
-	sudo apt install libsfml-dev build-essential cmake 
+	sudo apt install libsfml-dev build-essential cmake -y
